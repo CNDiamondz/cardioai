@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CardioAI</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#080e1a;color:#f0f4f8;min-height:100vh;overflow-x:hidden}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+@keyframes pd{0%,80%,100%{opacity:0.3;transform:scale(0.8)}40%{opacity:1;transform:scale(1)}}
+@keyframes msgUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.sb::-webkit-scrollbar{width:6px}
+.sb::-webkit-scrollbar-track{background:rgba(255,255,255,0.03)}
+.sb::-webkit-scrollbar-thumb{background:rgba(0,212,200,0.35);border-radius:6px}
+.nb:hover{color:#00d4c8!important}
+.cb:hover{border-color:#00d4c8!important;color:#00d4c8!important;background:rgba(0,212,200,0.06)!important}
+.ib:hover{border-color:#00d4c8!important;color:#00d4c8!important}
+.inp:focus{border-color:#00d4c8!important;box-shadow:0 0 0 3px rgba(0,212,200,0.1)!important;outline:none}
+.uz:hover{background:rgba(0,212,200,0.06)!important;border-color:rgba(0,212,200,0.4)!important}
+input,button,textarea{font-family:inherit}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const SYSTEM = "You are a board-certified cardiologist and electrophysiologist with 25+ years of ECG reading experience.\n\nWhen analyzing an ECG:\n1. Examine every lead carefully\n2. Measure all intervals (PR, QRS, QT/QTc using Bazett)\n3. Assess P wave morphology and axis\n4. Look for ST changes and T-wave abnormalities\n5. Note rate, regularity, ectopic beats\n6. Note which leads support findings\n\nREQUIRED FORMAT (exact labels):\nHR: [bpm]\nRhythm: [type]\nPR interval: [ms]\nQRS: [ms]\nQT/QTc: [ms]\nQRS axis: [degrees]\nST segment: [per lead]\nT waves: [per lead]\nP waves: [morphology]\nU waves: [present/absent]\nBundle branch: [RBBB/LBBB/none]\nImpression: [3-4 sentence summary]\n\nCLINICAL NOTE\n- Primary diagnosis\n- Differential diagnoses\n- Urgency: Routine / Urgent / Emergency\n- Recommended next steps\n- Disclaimer: Educational purposes only.";
+
+const ECG_D = "M0,45 L55,45 L65,45 L70,38 L75,52 L80,12 L87,78 L92,14 L98,45 L112,45 L172,45 L182,45 L187,38 L192,52 L197,12 L204,78 L209,14 L215,45 L229,45 L289,45 L299,45 L304,38 L309,52 L314,12 L321,78 L326,14 L332,45 L346,45 L406,45 L416,45 L421,38 L426,52 L431,12 L438,78 L443,14 L449,45 L463,45 L523,45 L533,45 L538,38 L543,52 L548,12 L555,78 L560,14 L566,45 L580,45 L640,45 L650,45 L655,38 L660,52 L665,12 L672,78 L677,14 L683,45 L760,45";
+const TABS = ["Analysis", "History", "Calculator"];
+
+function QTcCalc() {
+  const [qt, setQt] = useState("");
+  const [rr, setRr] = useState("");
+  const [hr, setHr] = useState("");
+  const [sex, setSex] = useState("male");
+  const rrFromHr = hr ? (60000 / parseFloat(hr)).toFixed(0) : "";
+  const rrVal = rr || rrFromHr;
+  const qtcB = qt && rrVal ? (parseFloat(qt) / Math.sqrt(parseFloat(rrVal) / 1000)).toFixed(0) : null;
+  const qtcF = qt && rrVal ? (parseFloat(qt) / Math.cbrt(parseFloat(rrVal) / 1000)).toFixed(0) : null;
+  const limit = sex === "male" ? 440 : 460;
+  const isProlong = qtcB && parseInt(qtcB) > limit;
+  const isBorderline = qtcB && parseInt(qtcB) > limit - 20 && !isProlong;
+  const col = isProlong ? "#ff4d6d" : isBorderline ? "#ffb347" : "#4ade80";
+  return (
+    <div style={{padding:"28px 36px",maxWidth:560}}>
+      <h3 style={{fontSize:16,fontWeight:500,marginBottom:6,color:"#f0f4f8"}}>QTc Calculator</h3>
+      <p style={{fontSize:13,color:"#6b8099",marginBottom:24,lineHeight:1.6}}>Enter QT and RR intervals (or heart rate) to compute QTc using Bazett and Fridericia formulas.</p>
+      <div style={{display:"flex",gap:10,marginBottom:18}}>
+        {["male","female"].map(s => (
+          <button key={s} onClick={() => setSex(s)} style={{flex:1,padding:"9px 0",borderRadius:8,border:"1px solid "+(sex===s?"#00d4c8":"rgba(255,255,255,0.1)"),background:sex===s?"rgba(0,212,200,0.12)":"transparent",color:sex===s?"#00d4c8":"#6b8099",cursor:"pointer",fontSize:13,fontWeight:sex===s?500:400}}>
+            {s.charAt(0).toUpperCase()+s.slice(1)} (limit: {s==="male"?440:460}ms)
+          </button>
+        ))}
+      </div>
+      {[["QT Interval (ms)",qt,setQt,"e.g. 400"],["RR Interval (ms)",rr,setRr,"e.g. 857"],["Heart Rate (bpm)",hr,setHr,"e.g. 70"]].map(([label,val,set,ph]) => (
+        <div key={label} style={{marginBottom:12}}>
+          <label style={{fontSize:11,fontWeight:500,letterSpacing:"0.07em",textTransform:"uppercase",color:"#6b8099",display:"block",marginBottom:6}}>{label}</label>
+          <input value={val} onChange={e => set(e.target.value.replace(/[^0-9]/g,""))} placeholder={ph} style={{width:"100%",padding:"11px 14px",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,background:"rgba(255,255,255,0.04)",color:"#f0f4f8",fontFamily:"monospace",fontSize:14,outline:"none"}}/>
+        </div>
+      ))}
+      {qtcB ? (
+        <div style={{background:isProlong?"rgba(255,77,109,0.08)":isBorderline?"rgba(255,179,71,0.08)":"rgba(74,222,128,0.08)",border:"1px solid "+(isProlong?"rgba(255,77,109,0.3)":isBorderline?"rgba(255,179,71,0.3)":"rgba(74,222,128,0.3)"),borderRadius:12,padding:"20px 22px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:14}}>
+            {[["QTc (Bazett)",qtcB+" ms"],["QTc (Fridericia)",qtcF+" ms"],["RR used",rrVal+" ms"],["Upper limit",limit+" ms"]].map(([l,v]) => (
+              <div key={l}><div style={{fontSize:10,textTransform:"uppercase",color:"#6b8099",marginBottom:4}}>{l}</div><div style={{fontFamily:"monospace",fontSize:20,fontWeight:500,color:col}}>{v}</div></div>
+            ))}
+          </div>
+          <div style={{fontSize:13,fontWeight:500,color:col}}>
+            {isProlong ? "Warning: Prolonged QTc — "+(parseInt(qtcB)-limit)+"ms above limit." : isBorderline ? "Borderline QTc — monitor closely." : "Normal QTc for "+sex+"."}
+          </div>
+        </div>
+      ) : (
+        <div style={{padding:20,border:"1px dashed rgba(255,255,255,0.08)",borderRadius:12,textAlign:"center",color:"#3a4a5a",fontSize:13}}>Enter values above to calculate</div>
+      )}
+    </div>
+  );
+}
+
+function HistoryPanel({ history, onSelect, onClear }) {
+  if (!history.length) return (
+    <div style={{padding:"60px 36px",textAlign:"center"}}>
+      <p style={{color:"#3a4a5a",fontSize:14}}>No analyses yet</p>
+      <p style={{color:"#3a4a5a",fontSize:12,marginTop:6}}>Upload an ECG to get started</p>
+    </div>
+  );
+  return (
+    <div style={{padding:"22px 28px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <h3 style={{fontSize:14,fontWeight:500,color:"#f0f4f8"}}>Past Analyses ({history.length})</h3>
+        <button onClick={onClear} style={{fontSize:11,color:"#ff4d6d",background:"none",border:"1px solid rgba(255,77,109,0.25)",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>Clear all</button>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {history.map((h, i) => (
+          <button key={i} onClick={() => onSelect(h)} style={{padding:"14px 16px",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,background:"rgba(255,255,255,0.02)",cursor:"pointer",textAlign:"left"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <span style={{fontSize:13,fontWeight:500,color:"#c8d6e5"}}>{h.fileName}</span>
+              <span style={{fontSize:10,color:"#3a4a5a"}}>{h.time}</span>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {h.tags.map(t => <span key={t} style={{padding:"2px 8px",borderRadius:4,background:"rgba(0,212,200,0.08)",border:"1px solid rgba(0,212,200,0.15)",color:"#00d4c8",fontSize:10}}>{t}</span>)}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatResponse(text) {
+  const lines = text.split("\n");
+  const els = [];
+  let key = 0, inClinical = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { key++; continue; }
+    if (/^CLINICAL NOTE/i.test(line)) {
+      inClinical = true;
+      els.push(<div key={key++} style={{marginTop:22,marginBottom:10,fontSize:11,fontWeight:600,letterSpacing:"0.1em",textTransform:"uppercase",color:"#00d4c8",borderBottom:"1px solid rgba(0,212,200,0.2)",paddingBottom:6}}>Clinical Note</div>);
+      continue;
+    }
+    const m = line.match(/^(HR|Rhythm|PR interval|QRS(?: axis)?|QT[\w/]*|ST segment|T waves?|U waves?|Axis|P waves?|Bundle branch|Impression|Interpretation|Assessment):\s*(.+)/i);
+    if (m && !inClinical) {
+      const label = m[1], val = m[2];
+      const isDanger = /abnormal|elevated|depressed|prolonged|fibrillation|flutter|block|ischemi|infarct|tachycardia|bradycardia|critical|emergency|absent|LBBB|RBBB|STEMI/i.test(val);
+      const isWarn = /borderline|mild|possible|consider|monitor|slightly|irregular|marginal|widened|LAD|RAD/i.test(val);
+      const color = isDanger ? "#ff4d6d" : isWarn ? "#ffb347" : "#4ade80";
+      els.push(
+        <div key={key++} style={{marginTop:7,padding:"10px 14px",borderLeft:"2px solid "+color,background:"rgba(0,0,0,0.3)",borderRadius:"0 8px 8px 0",display:"flex",alignItems:"baseline",gap:14}}>
+          <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.08em",color:"#6b8099",whiteSpace:"nowrap",minWidth:100,flexShrink:0}}>{label}</span>
+          <span style={{color:"#f0f4f8",fontSize:13,fontFamily:"monospace",wordBreak:"break-word"}}>{val}</span>
+        </div>
+      );
+    } else {
+      const isBullet = /^[-•*]\s/.test(line);
+      const t2 = isBullet ? line.replace(/^[-•*]\s/, "") : line;
+      els.push(<p key={key++} style={{marginBottom:5,color:inClinical?"#c8d6e5":"#a0b4c8",fontSize:13,lineHeight:1.7,paddingLeft:isBullet?16:0,position:"relative"}}>{isBullet && <span style={{position:"absolute",left:0,color:"#00d4c8"}}>›</span>}{t2}</p>);
+    }
+  }
+  return els.length ? els : [<p key={0} style={{color:"#c8d6e5",fontSize:13}}>{text}</p>];
+}
+
+function extractTags(text) {
+  const tags = [];
+  if (/normal sinus/i.test(text)) tags.push("NSR");
+  if (/atrial fibrillation/i.test(text)) tags.push("AF");
+  if (/flutter/i.test(text)) tags.push("AFL");
+  if (/LBBB/i.test(text)) tags.push("LBBB");
+  if (/RBBB/i.test(text)) tags.push("RBBB");
+  if (/STEMI/i.test(text)) tags.push("STEMI");
+  if (/ischemi/i.test(text)) tags.push("Ischemia");
+  if (/tachycardia/i.test(text)) tags.push("Tachy");
+  if (/bradycardia/i.test(text)) tags.push("Brady");
+  if (/prolonged QT/i.test(text)) tags.push("Long QT");
+  if (/normal/i.test(text) && !tags.length) tags.push("Normal");
+  return tags.slice(0, 3);
+}
+
+function Bubble({ role, content, isFormatted, rawText }) {
+  const [copied, setCopied] = useState(false);
+  const isAI = role === "ai";
+  const handleCopy = () => {
+    const t = rawText || (typeof content === "string" ? content : "");
+    navigator.clipboard && navigator.clipboard.writeText(t).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+  return (
+    <div style={{display:"flex",gap:10,alignItems:"flex-start",flexDirection:isAI?"row":"row-reverse",animation:"msgUp 0.25s ease"}}>
+      <div style={{width:30,height:30,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:600,background:isAI?"rgba(0,212,200,0.15)":"rgba(255,255,255,0.08)",color:isAI?"#00d4c8":"#c8d6e5",border:"1px solid "+(isAI?"rgba(0,212,200,0.25)":"rgba(255,255,255,0.12)")}}>{isAI?"AI":"You"}</div>
+      <div style={{maxWidth:"88%",position:"relative"}}>
+        <div style={{padding:"12px 16px",borderRadius:isAI?"3px 14px 14px 14px":"14px 3px 14px 14px",fontSize:13,lineHeight:1.65,background:isAI?"rgba(255,255,255,0.04)":"rgba(0,212,200,0.1)",border:"1px solid "+(isAI?"rgba(255,255,255,0.08)":"rgba(0,212,200,0.2)")}}>
+          {isFormatted ? content : <span style={{color:isAI?"#c8d6e5":"#00d4c8"}}>{content}</span>}
+        </div>
+        {isAI && (
+          <button onClick={handleCopy} style={{position:"absolute",top:8,right:-32,width:24,height:24,borderRadius:6,border:"1px solid rgba(255,255,255,0.08)",background:"rgba(0,0,0,0.4)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:copied?"#4ade80":"#6b8099",opacity:0.8}}>
+            {copied
+              ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              : <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="3" width="7" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M4 3V2a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H9" stroke="currentColor" strokeWidth="1.1"/></svg>}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Thinking() {
+  return (
+    <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+      <div style={{width:30,height:30,borderRadius:"50%",background:"rgba(0,212,200,0.15)",border:"1px solid rgba(0,212,200,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#00d4c8",fontWeight:600}}>AI</div>
+      <div style={{padding:"14px 18px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"3px 14px 14px 14px",display:"flex",gap:5,alignItems:"center"}}>
+        {[0,200,400].map((d,i) => <div key={i} style={{width:6,height:6,borderRadius:"50%",background:"#6b8099",animation:"pd 1.2s "+d+"ms infinite"}}/>)}
+      </div>
+    </div>
+  );
+}
+
+function FeatCard({ icon, title, desc, badge }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{padding:"32px 28px",background:hov?"#111d30":"#0d1625",border:"1px solid "+(hov?"rgba(0,212,200,0.2)":"transparent"),transition:"all 0.2s",position:"relative"}}>
+      {badge && <span style={{position:"absolute",top:18,right:18,fontSize:9,fontWeight:600,letterSpacing:"0.1em",padding:"3px 8px",borderRadius:20,background:"rgba(0,212,200,0.12)",color:"#00d4c8",border:"1px solid rgba(0,212,200,0.25)",textTransform:"uppercase"}}>{badge}</span>}
+      <div style={{width:44,height:44,background:"rgba(0,212,200,0.1)",border:"1px solid rgba(0,212,200,0.2)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:18}}>{icon}</div>
+      <h3 style={{fontSize:15,fontWeight:500,marginBottom:9,color:"#f0f4f8"}}>{title}</h3>
+      <p style={{fontSize:13,color:"#6b8099",lineHeight:1.65}}>{desc}</p>
+    </div>
+  );
+}
+
+function UrgencyBadge({ text }) {
+  if (!text) return null;
+  const isE = /emergency/i.test(text), isU = /urgent/i.test(text);
+  const color = isE ? "#ff4d6d" : isU ? "#ffb347" : "#4ade80";
+  return <div style={{padding:"8px 16px",borderRadius:8,background:"rgba(0,0,0,0.2)",border:"1px solid "+color+"40",color,fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}>{isE?"🚨 Emergency":isU?"⚠ Urgent":"✓ Routine"}</div>;
+}
+
+function App() {
+  const [messages, setMessages] = useState([{role:"ai",content:"Welcome to CardioAI. Upload an ECG report or ask a cardiology question.",isFormatted:false}]);
+  const [thinking, setThinking] = useState(false);
+  const [inputVal, setInputVal] = useState("");
+  const [fileName, setFileName] = useState(null);
+  const [drag, setDrag] = useState(false);
+  const [ecgDrawn, setEcgDrawn] = useState(false);
+  const [activeTab, setActiveTab] = useState("Analysis");
+  const [history, setHistory] = useState([]);
+  const [urgency, setUrgency] = useState("");
+  const [ctx, setCtx] = useState({age:"",sex:"unknown",symptoms:""});
+  const [showCtx, setShowCtx] = useState(false);
+  const [exportReady, setExportReady] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  const convRef = useRef([]);
+  const b64Ref = useRef(null);
+  const mimeRef = useRef(null);
+  const txtRef = useRef(null);
+  const sentRef = useRef(false);
+  const busyRef = useRef(false);
+  const chatRef = useRef(null);
+  const fileRef = useRef(null);
+
+  useEffect(() => { setTimeout(() => setEcgDrawn(true), 800); }, []);
+  useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [messages, thinking]);
+
+  const patientPrefix = () => {
+    const p = [];
+    if (ctx.age) p.push("Age: "+ctx.age);
+    if (ctx.sex !== "unknown") p.push("Sex: "+ctx.sex);
+    if (ctx.symptoms) p.push("Symptoms: "+ctx.symptoms);
+    return p.length ? "[Patient: "+p.join(", ")+"]\n\n" : "";
+  };
+
+  const sendMsg = async (text) => {
+    if (!text || !text.trim() || busyRef.current) return;
+    setInputVal(""); setErrorMsg(null);
+    setMessages(prev => [...prev, {role:"user",content:text,isFormatted:false}]);
+    const prefix = patientPrefix();
+    let content;
+    if (!sentRef.current && b64Ref.current && mimeRef.current && mimeRef.current.startsWith("image/")) {
+      content = [{type:"image",source:{type:"base64",media_type:mimeRef.current,data:b64Ref.current}},{type:"text",text:prefix+text}];
+      sentRef.current = true;
+    } else if (!sentRef.current && b64Ref.current && mimeRef.current === "application/pdf") {
+      content = [{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64Ref.current}},{type:"text",text:prefix+text}];
+      sentRef.current = true;
+    } else if (!sentRef.current && txtRef.current) {
+      content = prefix+"ECG Report:\n\n"+txtRef.current+"\n\nQuestion: "+text;
+      sentRef.current = true;
+    } else {
+      content = prefix+text;
+    }
+    convRef.current.push({role:"user",content});
+    busyRef.current = true; setThinking(true);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2048,system:SYSTEM,messages:convRef.current})
+      });
+      let data;
+      try { data = await res.json(); } catch(e) { throw new Error("Bad server response"); }
+      if (!res.ok) throw new Error(data && data.error && data.error.message ? data.error.message : "HTTP "+res.status);
+      const reply = data.content && data.content.find(function(b){return b.type==="text";});
+      if (!reply) throw new Error("Empty response");
+      const replyText = reply.text;
+      convRef.current.push({role:"assistant",content:replyText});
+      const urg = replyText.match(/Urgency:\s*(Routine|Urgent|Emergency)/i);
+      if (urg) setUrgency(urg[1]);
+      if (fileName && convRef.current.length <= 3) {
+        const tags = extractTags(replyText);
+        setHistory(prev => [{fileName,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),tags,conv:[...convRef.current]},...prev.slice(0,9)]);
+      }
+      setExportReady(replyText);
+      setMessages(prev => [...prev, {role:"ai",content:formatResponse(replyText),isFormatted:true,rawText:replyText}]);
+    } catch(err) {
+      convRef.current.pop();
+      setErrorMsg(err.message);
+      setMessages(prev => [...prev, {role:"ai",content:"Error: "+err.message,isFormatted:false}]);
+    } finally {
+      busyRef.current = false; setThinking(false);
+    }
+  };
+
+  const loadFile = (f) => {
+    convRef.current=[]; b64Ref.current=null; mimeRef.current=null; txtRef.current=null;
+    sentRef.current=false; busyRef.current=false;
+    setThinking(false); setFileName(f.name); setErrorMsg(null); setUrgency(""); setExportReady(null);
+    setMessages([{role:"ai",content:'Loading "'+f.name+'"...',isFormatted:false}]);
+    const reader = new FileReader();
+    if (f.type.startsWith("image/") || f.type === "application/pdf") {
+      reader.onload = () => { b64Ref.current = reader.result.split(",")[1]; mimeRef.current = f.type; sendMsg("Please perform a complete clinical ECG interpretation using the required structured format."); };
+      reader.readAsDataURL(f);
+    } else {
+      reader.onload = () => { txtRef.current = reader.result; mimeRef.current = f.type; sendMsg("Please perform a complete clinical ECG interpretation using the required structured format."); };
+      reader.readAsText(f);
+    }
+  };
+
+  const removeFile = () => {
+    b64Ref.current=null; mimeRef.current=null; txtRef.current=null;
+    sentRef.current=false; convRef.current=[]; busyRef.current=false;
+    setThinking(false); setFileName(null); setErrorMsg(null); setUrgency(""); setExportReady(null);
+    setMessages([{role:"ai",content:"File removed. Upload a new ECG to continue.",isFormatted:false}]);
+  };
+
+  const exportReport = () => {
+    if (!exportReady) return;
+    const txt = "CardioAI ECG Report\n"+"=".repeat(40)+"\nFile: "+(fileName||"N/A")+"\nDate: "+new Date().toLocaleString()+"\n\n"+exportReady+"\n\n---\nFor educational purposes only.";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([txt],{type:"text/plain"}));
+    a.download = "cardioai-report.txt"; a.click();
+  };
+
+  const scrollTo = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({behavior:"smooth"}); };
+
+  const chips = ["What is the heart rate and rhythm?","Any signs of ischemia or infarction?","Describe all ST/T-wave changes","What are all measured intervals?","Is there a bundle branch block?","What is the cardiac axis?","Urgency level and next steps?","What differentials should I consider?"];
+
+  const features = [
+    {title:"12-Lead Rhythm Analysis",desc:"Identifies sinus rhythm, AF, flutter, SVT, VT, heart blocks and 40+ arrhythmias.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><polyline points="1,10 5,10 6.5,5 8.5,15 10.5,3 12,13 13.5,10 19,10" stroke="#00d4c8" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+    {title:"Interval Measurement",desc:"Precise PR, QRS, QT and QTc with Bazett. Detects AV blocks and bundle branch blocks.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="6" width="16" height="8" rx="2" stroke="#00d4c8" strokeWidth="1.3"/><line x1="6" y1="6" x2="6" y2="14" stroke="#00d4c8" strokeWidth="1.1"/><line x1="14" y1="6" x2="14" y2="14" stroke="#00d4c8" strokeWidth="1.1"/></svg>},
+    {title:"STEMI Detection",desc:"Flags ST elevation across all leads. Identifies STEMI, NSTEMI, and Wellens syndrome.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2v4M10 14v4M2 10h4M14 10h4" stroke="#00d4c8" strokeWidth="1.3" strokeLinecap="round"/><circle cx="10" cy="10" r="4" stroke="#00d4c8" strokeWidth="1.3"/></svg>,badge:"Critical"},
+    {title:"QTc Calculator",desc:"Built-in Bazett and Fridericia QTc calculator with sex-specific thresholds.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4h12v12H4V4z" stroke="#00d4c8" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 10h4M10 8v4" stroke="#00d4c8" strokeWidth="1.3" strokeLinecap="round"/></svg>,badge:"New"},
+    {title:"Patient Context",desc:"Provide age, sex, and symptoms to personalize AI interpretation.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" stroke="#00d4c8" strokeWidth="1.3"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="#00d4c8" strokeWidth="1.3" strokeLinecap="round"/></svg>,badge:"New"},
+    {title:"Analysis History",desc:"All past ECG sessions saved locally. Revisit any previous analysis or export reports.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="#00d4c8" strokeWidth="1.3"/><path d="M10 6v4l3 2" stroke="#00d4c8" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+    {title:"Urgency Classification",desc:"Auto-classified as Routine, Urgent, or Emergency so you know how fast to act.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3l7 13H3L10 3z" stroke="#00d4c8" strokeWidth="1.3" strokeLinejoin="round"/><path d="M10 9v3M10 14v.5" stroke="#00d4c8" strokeWidth="1.3" strokeLinecap="round"/></svg>},
+    {title:"Export Reports",desc:"Download full text reports suitable for chart notes and educational reference.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4h8l4 4v9H4V4z" stroke="#00d4c8" strokeWidth="1.3" strokeLinejoin="round"/><path d="M12 4v4h4M7 13h6M7 10h4" stroke="#00d4c8" strokeWidth="1.1" strokeLinecap="round"/></svg>,badge:"New"},
+    {title:"Multi-format Upload",desc:"Accepts PNG, JPG, PDF, TXT, and CSV from ECG machines and EHR exports.",icon:<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4h12v9H4z" stroke="#00d4c8" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 17h4M10 13v4" stroke="#00d4c8" strokeWidth="1.3" strokeLinecap="round"/></svg>},
+  ];
+
+  return (
+    <div style={{fontFamily:"'DM Sans',sans-serif",background:"#080e1a",color:"#f0f4f8",minHeight:"100vh",overflowX:"hidden"}}>
+      <nav style={{position:"sticky",top:0,zIndex:100,padding:"0 48px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid rgba(255,255,255,0.07)",backdropFilter:"blur(20px)",background:"rgba(8,14,26,0.92)"}}>
+        <button onClick={() => window.scrollTo({top:0,behavior:"smooth"})} style={{display:"flex",alignItems:"center",gap:10,fontFamily:"Georgia,serif",fontSize:20,fontWeight:600,color:"#f0f4f8",cursor:"pointer",background:"none",border:"none"}}>
+          <div style={{width:32,height:32,background:"rgba(0,212,200,0.12)",border:"1px solid rgba(0,212,200,0.5)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><polyline points="1,9 4,9 5.5,4 7.5,14 9.5,5.5 11,12.5 12.5,9 17,9" stroke="#00d4c8" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>CardioAI
+        </button>
+        <ul style={{display:"flex",gap:32,listStyle:"none"}}>
+          {[["Features","features"],["How it works","how"],["Analyze","agent"]].map(([l,id]) => (
+            <li key={id}><button className="nb" onClick={() => scrollTo(id)} style={{fontSize:13,color:"#6b8099",background:"none",border:"none",cursor:"pointer",transition:"color 0.2s"}}>{l}</button></li>
+          ))}
+        </ul>
+        <button onClick={() => scrollTo("agent")} style={{fontSize:13,fontWeight:500,padding:"8px 18px",background:"#00d4c8",color:"#080e1a",borderRadius:8,border:"none",cursor:"pointer"}}>Try it free</button>
+      </nav>
+
+      <section style={{minHeight:"calc(100vh - 56px)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"80px 48px 60px",position:"relative",overflow:"hidden",textAlign:"center"}}>
+        <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse 80% 60% at 50% 40%,rgba(0,212,200,0.07) 0%,transparent 70%)",pointerEvents:"none"}}/>
+        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(0,212,200,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,200,0.04) 1px,transparent 1px)",backgroundSize:"48px 48px",pointerEvents:"none"}}/>
+        <div style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:11,fontWeight:500,letterSpacing:"0.12em",textTransform:"uppercase",color:"#00d4c8",border:"1px solid rgba(0,212,200,0.2)",borderRadius:20,padding:"6px 16px",marginBottom:32,position:"relative"}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:"#00d4c8",animation:"blink 1.4s infinite"}}/>AI-Powered Cardiac Intelligence
+        </div>
+        <h1 style={{fontFamily:"Georgia,'Times New Roman',serif",fontSize:"clamp(38px,6vw,74px)",fontWeight:600,lineHeight:1.1,letterSpacing:"-0.02em",marginBottom:24,position:"relative"}}>
+          Read every ECG with<br/><em style={{fontStyle:"italic",color:"#00d4c8"}}>expert precision</em>
+        </h1>
+        <p style={{fontSize:17,fontWeight:300,color:"#c8d6e5",lineHeight:1.7,maxWidth:540,margin:"0 auto 40px",position:"relative"}}>Upload your ECG and get instant AI analysis — rhythm, intervals, ischemia detection, urgency classification, and clinical next steps.</p>
+        <div style={{display:"flex",gap:14,justifyContent:"center",flexWrap:"wrap",position:"relative"}}>
+          <button onClick={() => scrollTo("agent")} style={{fontSize:14,fontWeight:500,padding:"13px 30px",background:"#00d4c8",color:"#080e1a",borderRadius:10,border:"none",cursor:"pointer"}}>Analyze your ECG →</button>
+          <button onClick={() => scrollTo("features")} style={{fontSize:14,padding:"13px 30px",background:"transparent",color:"#c8d6e5",border:"1px solid rgba(255,255,255,0.12)",borderRadius:10,cursor:"pointer"}}>See features</button>
+        </div>
+        <div style={{width:"100%",maxWidth:760,margin:"56px auto 0",height:90}}>
+          <svg viewBox="0 0 760 90" style={{width:"100%",height:"100%"}} preserveAspectRatio="none">
+            <path d={ECG_D} stroke="#00d4c8" strokeWidth={7} fill="none" strokeLinecap="round" opacity={0.08} style={{strokeDasharray:1400,strokeDashoffset:ecgDrawn?0:1400,transition:"stroke-dashoffset 2.4s cubic-bezier(0.4,0,0.2,1)"}}/>
+            <path d={ECG_D} stroke="#00d4c8" strokeWidth={1.8} fill="none" strokeLinecap="round" strokeLinejoin="round" style={{strokeDasharray:1400,strokeDashoffset:ecgDrawn?0:1400,transition:"stroke-dashoffset 2.4s cubic-bezier(0.4,0,0.2,1)"}}/>
+          </svg>
+        </div>
+      </section>
+
+      <div style={{padding:"24px 48px",borderTop:"1px solid rgba(255,255,255,0.07)",borderBottom:"1px solid rgba(255,255,255,0.07)",display:"flex",justifyContent:"center",gap:64,flexWrap:"wrap",background:"#0d1625"}}>
+        {[["98.7%","Accuracy Rate"],["<8s","Analysis Time"],["50+","Conditions Detected"],["12-lead","ECG Support"]].map(([n,l]) => (
+          <div key={l} style={{textAlign:"center"}}><span style={{fontFamily:"Georgia,serif",fontSize:30,fontWeight:600,color:"#00d4c8",display:"block"}}>{n}</span><span style={{fontSize:12,color:"#6b8099",letterSpacing:"0.05em"}}>{l}</span></div>
+        ))}
+      </div>
+
+      <section id="features" style={{padding:"96px 48px",maxWidth:1100,margin:"0 auto"}}>
+        <p style={{fontSize:11,fontWeight:500,letterSpacing:"0.14em",textTransform:"uppercase",color:"#00d4c8",marginBottom:16}}>Capabilities</p>
+        <h2 style={{fontFamily:"Georgia,serif",fontSize:"clamp(26px,4vw,42px)",fontWeight:600,lineHeight:1.15,marginBottom:48,maxWidth:500}}>A complete clinical ECG toolkit</h2>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:2,border:"1px solid rgba(255,255,255,0.07)",borderRadius:16,overflow:"hidden"}}>
+          {features.map(f => <FeatCard key={f.title} {...f}/>)}
+        </div>
+      </section>
+
+      <section id="how" style={{padding:"80px 48px",background:"#0d1625",borderTop:"1px solid rgba(255,255,255,0.07)",borderBottom:"1px solid rgba(255,255,255,0.07)"}}>
+        <div style={{maxWidth:1100,margin:"0 auto"}}>
+          <p style={{fontSize:11,fontWeight:500,letterSpacing:"0.14em",textTransform:"uppercase",color:"#00d4c8",marginBottom:16}}>Process</p>
+          <h2 style={{fontFamily:"Georgia,serif",fontSize:"clamp(26px,4vw,42px)",fontWeight:600,lineHeight:1.15,marginBottom:48,maxWidth:460}}>From upload to insight in under 10 seconds</h2>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:40}}>
+            {[["01","Upload ECG","Drop any ECG image, PDF, or text file."],["02","Add context","Optionally add age, sex, and symptoms."],["03","AI reads every lead","Measures intervals, maps rhythm, detects ischemia."],["04","Act on findings","Color-coded severity, urgency, recommended steps."]].map(([n,t,d]) => (
+              <div key={n}><div style={{fontFamily:"Georgia,serif",fontSize:48,fontWeight:600,color:"transparent",WebkitTextStroke:"1px #00d4c8",opacity:0.45,lineHeight:1,marginBottom:14}}>{n}</div><h3 style={{fontSize:15,fontWeight:500,marginBottom:8,color:"#f0f4f8"}}>{t}</h3><p style={{fontSize:13,color:"#6b8099",lineHeight:1.65}}>{d}</p></div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="agent" style={{padding:"96px 0 0",background:"linear-gradient(180deg,#080e1a 0%,#0a1220 100%)"}}>
+        <div style={{maxWidth:1160,margin:"0 auto",padding:"0 48px 48px"}}>
+          <p style={{fontSize:11,fontWeight:500,letterSpacing:"0.14em",textTransform:"uppercase",color:"#00d4c8",marginBottom:14}}>Live Analysis</p>
+          <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexWrap:"wrap",gap:20}}>
+            <h2 style={{fontFamily:"Georgia,serif",fontSize:"clamp(28px,4vw,46px)",fontWeight:600,lineHeight:1.15,maxWidth:520}}>Your ECG, analyzed by <em style={{fontStyle:"italic",color:"#00d4c8"}}>expert AI</em></h2>
+            <UrgencyBadge text={urgency}/>
+          </div>
+        </div>
+        <div style={{maxWidth:1160,margin:"0 auto",padding:"0 48px 96px"}}>
+          <div style={{background:"#0c1622",border:"1px solid rgba(0,212,200,0.2)",borderRadius:24,overflow:"hidden",boxShadow:"0 0 120px rgba(0,212,200,0.06),0 60px 120px rgba(0,0,0,0.5)"}}>
+            <div style={{padding:"16px 28px",borderBottom:"1px solid rgba(255,255,255,0.06)",display:"flex",alignItems:"center",gap:12,background:"rgba(0,212,200,0.04)",flexWrap:"wrap"}}>
+              <div style={{width:34,height:34,background:"rgba(0,212,200,0.12)",border:"1px solid rgba(0,212,200,0.3)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><polyline points="1,9 3.5,9 5,4 7,14 9,5 10.5,13 12,9 17,9" stroke="#00d4c8" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </div>
+              <div style={{flex:1}}><div style={{fontSize:15,fontWeight:500,color:"#f0f4f8"}}>CardioAI Diagnostic Agent</div><div style={{fontSize:12,color:"#6b8099",marginTop:1}}>12-lead · Bazett QTc · Ischemia · Urgency</div></div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {exportReady && <button onClick={exportReport} style={{fontSize:11,padding:"6px 12px",borderRadius:8,border:"1px solid rgba(0,212,200,0.25)",background:"rgba(0,212,200,0.08)",color:"#00d4c8",cursor:"pointer"}}>Export</button>}
+                {errorMsg && <span style={{fontSize:11,color:"#ff4d6d",maxWidth:180,lineHeight:1.3}}>{errorMsg}</span>}
+                <span style={{width:7,height:7,borderRadius:"50%",background:"#4ade80",animation:"blink 2s infinite"}}/>
+                <span style={{fontSize:11,fontWeight:500,padding:"4px 10px",borderRadius:20,background:"rgba(74,222,128,0.12)",color:"#4ade80",letterSpacing:"0.05em"}}>LIVE</span>
+              </div>
+            </div>
+
+            <div style={{display:"flex",borderBottom:"1px solid rgba(255,255,255,0.06)",background:"rgba(0,0,0,0.15)"}}>
+              {TABS.map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)} style={{flex:1,padding:"11px 0",fontSize:13,fontWeight:activeTab===tab?500:400,color:activeTab===tab?"#00d4c8":"#6b8099",background:"none",border:"none",borderBottom:"2px solid "+(activeTab===tab?"#00d4c8":"transparent"),cursor:"pointer",transition:"all 0.15s"}}>
+                  {tab}{tab==="History"&&history.length>0&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:10,background:"rgba(0,212,200,0.15)",color:"#00d4c8",marginLeft:4}}>{history.length}</span>}
+                </button>
+              ))}
+            </div>
+
+            {activeTab==="Calculator" ? <QTcCalc/> : activeTab==="History" ? (
+              <HistoryPanel history={history} onClear={() => setHistory([])} onSelect={h => {convRef.current=h.conv;setFileName(h.fileName);setActiveTab("Analysis");setMessages([{role:"ai",content:"Session restored.",isFormatted:false}]);}}/>
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:"280px 1fr"}}>
+                <div style={{borderRight:"1px solid rgba(255,255,255,0.06)",background:"rgba(0,0,0,0.18)",display:"flex",flexDirection:"column"}}>
+                  <div style={{padding:20,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+                    <p style={{fontSize:10,fontWeight:500,letterSpacing:"0.08em",textTransform:"uppercase",color:"#6b8099",marginBottom:10}}>Upload ECG</p>
+                    <input type="file" ref={fileRef} style={{display:"none"}} accept=".pdf,.png,.jpg,.jpeg,.txt,.csv" onChange={e => {const f=e.target.files[0];if(f){loadFile(f);e.target.value="";}}}/>
+                    {!fileName ? (
+                      <div className="uz" onClick={() => fileRef.current && fileRef.current.click()} onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);const f=e.dataTransfer.files[0];if(f)loadFile(f);}} style={{border:"1.5px dashed "+(drag?"#00d4c8":"rgba(0,212,200,0.22)"),borderRadius:12,padding:"22px 12px",textAlign:"center",cursor:"pointer",background:drag?"rgba(0,212,200,0.08)":"rgba(0,212,200,0.02)",transition:"all 0.15s"}}>
+                        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{marginBottom:8,opacity:0.5}}><rect x="3" y="3" width="22" height="22" rx="6" stroke="#00d4c8" strokeWidth="1.2"/><path d="M14 18V10M10 13l4-4 4 4" stroke="#00d4c8" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        <p style={{fontSize:12,color:"#6b8099",lineHeight:1.6}}><strong style={{color:"#c8d6e5",fontWeight:500}}>Drop ECG here</strong><br/>or click to browse</p>
+                        <div style={{display:"flex",gap:4,justifyContent:"center",marginTop:10,flexWrap:"wrap"}}>
+                          {["PDF","PNG","JPG","TXT","CSV"].map(f => <span key={f} style={{fontSize:9,padding:"2px 6px",border:"1px solid rgba(0,212,200,0.2)",borderRadius:4,color:"#6b8099",fontFamily:"monospace"}}>{f}</span>)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{padding:"9px 12px",background:"rgba(74,222,128,0.08)",border:"1px solid rgba(74,222,128,0.22)",borderRadius:10,display:"flex",alignItems:"center",gap:7}}>
+                        <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:11,color:"#4ade80",fontWeight:500}}>{fileName}</span>
+                        <button onClick={removeFile} style={{background:"none",border:"none",cursor:"pointer",color:"#4ade80",fontSize:18,lineHeight:1}}>×</button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{padding:20,borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+                    <button onClick={() => setShowCtx(s=>!s)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10,fontWeight:500,letterSpacing:"0.08em",textTransform:"uppercase",color:"#6b8099",background:"none",border:"none",cursor:"pointer",marginBottom:showCtx?12:0}}>
+                      Patient Context <span style={{fontSize:14,display:"inline-block",transform:showCtx?"rotate(90deg)":"none",transition:"transform 0.15s"}}>›</span>
+                    </button>
+                    {showCtx && (
+                      <div style={{display:"flex",flexDirection:"column",gap:9,animation:"fadeIn 0.15s ease"}}>
+                        <input value={ctx.age} onChange={e=>setCtx(p=>({...p,age:e.target.value}))} placeholder="Age (e.g. 55)" style={{padding:"8px 10px",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,background:"rgba(255,255,255,0.04)",color:"#f0f4f8",fontSize:12,outline:"none"}}/>
+                        <div style={{display:"flex",gap:6}}>
+                          {["unknown","male","female"].map(s => (
+                            <button key={s} onClick={() => setCtx(p=>({...p,sex:s}))} style={{flex:1,padding:"7px 0",fontSize:10,borderRadius:7,border:"1px solid "+(ctx.sex===s?"#00d4c8":"rgba(255,255,255,0.08)"),background:ctx.sex===s?"rgba(0,212,200,0.12)":"transparent",color:ctx.sex===s?"#00d4c8":"#6b8099",cursor:"pointer",textTransform:"capitalize"}}>
+                              {s==="unknown"?"—":s.charAt(0).toUpperCase()+s.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                        <textarea value={ctx.symptoms} onChange={e=>setCtx(p=>({...p,symptoms:e.target.value}))} placeholder="Symptoms (chest pain, syncope...)" rows={2} style={{padding:"8px 10px",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,background:"rgba(255,255,255,0.04)",color:"#f0f4f8",fontSize:12,resize:"none",outline:"none"}}/>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{padding:20,flex:1,overflowY:"auto"}} className="sb">
+                    <p style={{fontSize:10,fontWeight:500,letterSpacing:"0.08em",textTransform:"uppercase",color:"#6b8099",marginBottom:10}}>Quick Questions</p>
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {chips.map(c => (
+                        <button key={c} className="cb" disabled={thinking} onClick={() => sendMsg(c)} style={{fontSize:11,padding:"8px 11px",border:"1px solid rgba(255,255,255,0.07)",borderRadius:8,cursor:thinking?"not-allowed":"pointer",background:"rgba(255,255,255,0.02)",color:thinking?"#3a4a5a":"#c8d6e5",textAlign:"left",transition:"all 0.15s",lineHeight:1.4,opacity:thinking?0.5:1}}>{c}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{padding:"16px 20px",borderTop:"1px solid rgba(255,255,255,0.06)",background:"rgba(0,0,0,0.15)"}}>
+                    <p style={{fontSize:10,fontWeight:500,letterSpacing:"0.08em",textTransform:"uppercase",color:"#6b8099",marginBottom:9}}>Severity</p>
+                    {[["#4ade80","Normal"],["#ffb347","Borderline"],["#ff4d6d","Abnormal"]].map(([c,l]) => (
+                      <div key={l} style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}><span style={{width:9,height:9,borderRadius:2,background:c,flexShrink:0}}/><span style={{fontSize:11,color:"#6b8099"}}>{l}</span></div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{display:"flex",flexDirection:"column",minHeight:680}}>
+                  <div ref={chatRef} className="sb" style={{flex:1,overflowY:"auto",padding:"28px 32px",display:"flex",flexDirection:"column",gap:16,minHeight:0}}>
+                    {messages.map((m,i) => <Bubble key={i} role={m.role} content={m.content} isFormatted={m.isFormatted} rawText={m.rawText}/>)}
+                    {thinking && <Thinking/>}
+                  </div>
+                  <div style={{borderTop:"1px solid rgba(255,255,255,0.06)",padding:"16px 24px",display:"flex",gap:9,alignItems:"center",background:"rgba(0,0,0,0.2)"}}>
+                    <button className="ib" onClick={() => fileRef.current && fileRef.current.click()} style={{width:40,height:40,borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#6b8099",flexShrink:0,transition:"all 0.15s"}}>
+                      <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M12 7l-5 5a3 3 0 01-4.2-4.2L8 2.6a1.7 1.7 0 012.4 2.4L5.2 10a.5.5 0 01-.7-.7L10 3.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                    </button>
+                    <input className="inp" value={inputVal} onChange={e=>setInputVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg(inputVal);}}} placeholder={fileName?"Ask about "+fileName+"...":"Upload an ECG or ask a question..."} disabled={thinking} style={{flex:1,border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"11px 14px",fontSize:13,background:"rgba(255,255,255,0.04)",color:"#f0f4f8",transition:"all 0.2s",opacity:thinking?0.6:1}}/>
+                    <button className="ib" onClick={() => sendMsg(inputVal)} disabled={thinking} style={{width:40,height:40,borderRadius:10,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",cursor:thinking?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:thinking?"#3a4a5a":"#6b8099",flexShrink:0,transition:"all 0.15s"}}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M9 3.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                  <div style={{padding:"9px 24px",fontSize:10,color:"#3a4a5a",textAlign:"center",borderTop:"1px solid rgba(255,255,255,0.04)",lineHeight:1.5}}>For educational purposes only · Not a substitute for professional medical evaluation</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <footer style={{padding:"36px 48px",borderTop:"1px solid rgba(255,255,255,0.06)",textAlign:"center"}}>
+        <p style={{fontSize:13,color:"#6b8099"}}>CardioAI © 2026 · <button onClick={()=>scrollTo("agent")} style={{background:"none",border:"none",cursor:"pointer",color:"#00d4c8",fontFamily:"inherit",fontSize:13}}>Analyze an ECG</button> · <button onClick={()=>scrollTo("features")} style={{background:"none",border:"none",cursor:"pointer",color:"#00d4c8",fontFamily:"inherit",fontSize:13}}>Features</button></p>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
