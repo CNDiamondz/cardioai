@@ -2,82 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>CardioAI – Download</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',sans-serif;background:#080e1a;color:#f0f4f8;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.card{background:#0c1622;border:1px solid rgba(0,212,200,0.25);border-radius:20px;padding:48px 56px;text-align:center;max-width:460px;width:90%}
-h1{font-family:Georgia,serif;font-size:28px;margin:0 0 10px;color:#f0f4f8}
-p{font-size:14px;color:#6b8099;line-height:1.7;margin:0 0 28px}
-#dlbtn{font-size:15px;font-weight:500;padding:14px 36px;background:#00d4c8;color:#080e1a;border:none;border-radius:10px;cursor:pointer;font-family:inherit}
-#dlbtn:disabled{opacity:0.4;cursor:not-allowed}
-.status{margin-top:16px;font-size:13px;color:#00d4c8;min-height:20px}
-.note{margin-top:20px;font-size:12px;color:#6b8099;text-align:left;padding:14px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;line-height:2}
-code{color:#00d4c8;font-family:monospace}
-</style>
-</head>
-<body>
-<div class="card">
-  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="margin-bottom:20px">
-    <rect width="48" height="48" rx="12" fill="rgba(0,212,200,0.12)" stroke="rgba(0,212,200,0.4)" stroke-width="1.5"/>
-    <polyline points="4,24 10,24 14,11 19,37 24,14 28,32 32,24 44,24" stroke="#00d4c8" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-  <h1>CardioAI</h1>
-  <p>Download, upload to GitHub, connect to Netlify, add API key — done.</p>
-  <button id="dlbtn">⬇ Download cardioai.zip</button>
-  <div class="status" id="status"></div>
-  <div class="note">
-    <strong style="color:#c8d6e5">After deploying:</strong><br/>
-    1. Netlify → Site config → Environment variables<br/>
-    2. Add: Key = <code>ANTHROPIC_API_KEY</code><br/>
-    3. Value = your <code>sk-ant-...</code> key<br/>
-    4. Deploys → Trigger deploy
-  </div>
-</div>
-<script>
-document.getElementById('dlbtn').addEventListener('click', async function() {
-  var btn = document.getElementById('dlbtn');
-  var status = document.getElementById('status');
-  btn.disabled = true;
-  status.textContent = 'Building...';
-
-  try {
-    var toml = '[build]\n  functions = "netlify/functions"\n\n[[redirects]]\n  from = "/api/claude"\n  to = "/.netlify/functions/claude"\n  status = 200\n  force = true\n';
-
-    var func = `exports.handler = async function(event) {
-  const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Content-Type": "application/json"
-  };
-  if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers, body: "" };
-  if (event.httpMethod !== "POST") return { statusCode: 405, headers, body: JSON.stringify({error:{message:"Method Not Allowed"}}) };
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { statusCode: 500, headers, body: JSON.stringify({error:{message:"ANTHROPIC_API_KEY not set in environment variables."}}) };
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: event.body
-    });
-    const data = await res.json();
-    return { statusCode: res.status, headers, body: JSON.stringify(data) };
-  } catch(e) {
-    return { statusCode: 500, headers, body: JSON.stringify({error:{message:e.message}}) };
-  }
-};`;
-
-    var html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>CardioAI</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"><\/script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"><\/script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"><\/script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <style>
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap");
 *{box-sizing:border-box;margin:0;padding:0}
@@ -98,7 +27,7 @@ input,button,textarea{font-family:inherit}
 <script type="text/babel">
 const {useState,useRef,useEffect}=React;
 const API_URL="/.netlify/functions/claude";
-const SYSTEM=\`You are a board-certified cardiologist with 25+ years of ECG experience.
+const SYSTEM=`You are a board-certified cardiologist with 25+ years of ECG experience.
 REQUIRED FORMAT (exact labels on their own lines):
 HR: [bpm]
 Rhythm: [type]
@@ -118,7 +47,7 @@ CLINICAL NOTE
 - Differentials
 - Urgency: Routine / Urgent / Emergency
 - Next steps
-- Disclaimer: Educational purposes only.\`;
+- Disclaimer: Educational purposes only.`;
 const ECG_D="M0,45 L55,45 L65,45 L70,38 L75,52 L80,12 L87,78 L92,14 L98,45 L112,45 L172,45 L182,45 L187,38 L192,52 L197,12 L204,78 L209,14 L215,45 L229,45 L289,45 L299,45 L304,38 L309,52 L314,12 L321,78 L326,14 L332,45 L346,45 L406,45 L416,45 L421,38 L426,52 L431,12 L438,78 L443,14 L449,45 L463,45 L523,45 L533,45 L538,38 L543,52 L548,12 L555,78 L560,14 L566,45 L580,45 L640,45 L650,45 L655,38 L660,52 L665,12 L672,78 L677,14 L683,45 L760,45";
 const TABS=["Analysis","History","Calculator"];
 
@@ -145,11 +74,11 @@ function HistoryPanel({history,onSelect,onClear}){
 }
 
 function formatResponse(text){
-  const lines=text.split("\\n");const els=[];let key=0,inC=false;
+  const lines=text.split("\n");const els=[];let key=0,inC=false;
   for(const raw of lines){
     const line=raw.trim();if(!line){key++;continue;}
     if(/^CLINICAL NOTE/i.test(line)){inC=true;els.push(<div key={key++} style={{marginTop:22,marginBottom:10,fontSize:11,fontWeight:600,letterSpacing:"0.1em",textTransform:"uppercase",color:"#00d4c8",borderBottom:"1px solid rgba(0,212,200,0.2)",paddingBottom:6}}>Clinical Note</div>);continue;}
-    const m=line.match(/^(HR|Rhythm|PR interval|QRS(?: axis)?|QT[\\w\\/]*|ST segment|T waves?|U waves?|P waves?|Bundle branch|Impression|Axis):\\s*(.+)/i);
+    const m=line.match(/^(HR|Rhythm|PR interval|QRS(?: axis)?|QT[\w\/]*|ST segment|T waves?|U waves?|P waves?|Bundle branch|Impression|Axis):\s*(.+)/i);
     if(m&&!inC){
       const[,label,val]=m;
       const isDanger=/abnormal|elevated|depressed|prolonged|fibrillation|flutter|block|ischemi|infarct|tachycardia|bradycardia|LBBB|RBBB|STEMI/i.test(val);
@@ -157,7 +86,7 @@ function formatResponse(text){
       const color=isDanger?"#ff4d6d":isWarn?"#ffb347":"#4ade80";
       els.push(<div key={key++} style={{marginTop:7,padding:"10px 14px",borderLeft:"2px solid "+color,background:"rgba(0,0,0,0.3)",borderRadius:"0 8px 8px 0",display:"flex",alignItems:"baseline",gap:14}}><span style={{fontSize:10,textTransform:"uppercase",color:"#6b8099",whiteSpace:"nowrap",minWidth:100,flexShrink:0}}>{label}</span><span style={{color:"#f0f4f8",fontSize:13,fontFamily:"monospace",wordBreak:"break-word"}}>{val}</span></div>);
     }else{
-      const isBullet=/^[-•*]\\s/.test(line);const t2=isBullet?line.replace(/^[-•*]\\s/,""):line;
+      const isBullet=/^[-•*]\s/.test(line);const t2=isBullet?line.replace(/^[-•*]\s/,""):line;
       els.push(<p key={key++} style={{marginBottom:5,color:inC?"#c8d6e5":"#a0b4c8",fontSize:13,lineHeight:1.7,paddingLeft:isBullet?16:0,position:"relative"}}>{isBullet&&<span style={{position:"absolute",left:0,color:"#00d4c8"}}>›</span>}{t2}</p>);
     }
   }
@@ -195,7 +124,7 @@ function App(){
   useEffect(()=>{setTimeout(()=>setEcgDrawn(true),800);},[]);
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[messages,thinking]);
 
-  const prefix=()=>{const p=[];if(ctx.age)p.push("Age: "+ctx.age);if(ctx.sex!=="unknown")p.push("Sex: "+ctx.sex);if(ctx.symptoms)p.push("Symptoms: "+ctx.symptoms);return p.length?"[Patient: "+p.join(", ")+"]\\n\\n":"";};
+  const prefix=()=>{const p=[];if(ctx.age)p.push("Age: "+ctx.age);if(ctx.sex!=="unknown")p.push("Sex: "+ctx.sex);if(ctx.symptoms)p.push("Symptoms: "+ctx.symptoms);return p.length?"[Patient: "+p.join(", ")+"]\n\n":"";};
 
   const sendMsg=async(text)=>{
     if(!text||!text.trim()||busyRef.current)return;
@@ -204,7 +133,7 @@ function App(){
     const pre=prefix();let content;
     if(!sentRef.current&&b64Ref.current&&mimeRef.current?.startsWith("image/")){content=[{type:"image",source:{type:"base64",media_type:mimeRef.current,data:b64Ref.current}},{type:"text",text:pre+text}];sentRef.current=true;}
     else if(!sentRef.current&&b64Ref.current&&mimeRef.current==="application/pdf"){content=[{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64Ref.current}},{type:"text",text:pre+text}];sentRef.current=true;}
-    else if(!sentRef.current&&txtRef.current){content=pre+"ECG Report:\\n\\n"+txtRef.current+"\\n\\nQuestion: "+text;sentRef.current=true;}
+    else if(!sentRef.current&&txtRef.current){content=pre+"ECG Report:\n\n"+txtRef.current+"\n\nQuestion: "+text;sentRef.current=true;}
     else{content=pre+text;}
     convRef.current.push({role:"user",content});
     busyRef.current=true;setThinking(true);
@@ -215,7 +144,7 @@ function App(){
       const reply=data.content?.find(b=>b.type==="text")?.text;
       if(!reply)throw new Error("Empty response");
       convRef.current.push({role:"assistant",content:reply});
-      const urg=reply.match(/Urgency:\\s*(Routine|Urgent|Emergency)/i);if(urg)setUrgency(urg[1]);
+      const urg=reply.match(/Urgency:\s*(Routine|Urgent|Emergency)/i);if(urg)setUrgency(urg[1]);
       if(fileName&&convRef.current.length<=3){const tags=extractTags(reply);setHistory(prev=>[{fileName,time:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),tags,conv:[...convRef.current]},...prev.slice(0,9)]);}
       setExportReady(reply);
       setMessages(prev=>[...prev,{role:"ai",content:formatResponse(reply),isFormatted:true,rawText:reply}]);
@@ -235,7 +164,7 @@ function App(){
   };
 
   const removeFile=()=>{b64Ref.current=null;mimeRef.current=null;txtRef.current=null;sentRef.current=false;convRef.current=[];busyRef.current=false;setThinking(false);setFileName(null);setErrorMsg(null);setUrgency("");setExportReady(null);setMessages([{role:"ai",content:"File removed.",isFormatted:false}]);};
-  const exportReport=()=>{if(!exportReady)return;const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["CardioAI Report\\n"+"=".repeat(40)+"\\n"+exportReady+"\\n\\nFor educational purposes only."],{type:"text/plain"}));a.download="cardioai-report.txt";a.click();};
+  const exportReport=()=>{if(!exportReady)return;const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["CardioAI Report\n"+"=".repeat(40)+"\n"+exportReady+"\n\nFor educational purposes only."],{type:"text/plain"}));a.download="cardioai-report.txt";a.click();};
   const scrollTo=(id)=>{const el=document.getElementById(id);if(el)el.scrollIntoView({behavior:"smooth"});};
   const chips=["What is the heart rate and rhythm?","Signs of ischemia or infarction?","Describe all ST/T-wave changes","All measured intervals?","Bundle branch block present?","Cardiac axis?","Urgency and next steps?","Differential diagnoses?"];
 
@@ -325,30 +254,6 @@ function App(){
   </div>);
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
-<\/script>
-<\/body>
-<\/html>`;
-
-    var zip = new JSZip();
-    zip.file('index.html', html);
-    zip.file('netlify.toml', toml);
-    zip.file('netlify/functions/claude.js', func);
-    zip.file('README.txt', 'CardioAI\n\n1. Upload to GitHub\n2. Connect to Netlify (Import from Git)\n3. Environment variables: ANTHROPIC_API_KEY = your key\n4. Trigger deploy\n');
-
-    status.textContent = 'Compressing...';
-    var blob = await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'cardioai.zip';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    status.textContent = '✓ Downloaded! Upload ALL files to GitHub then deploy to Netlify.';
-  } catch(e) {
-    status.textContent = 'Error: ' + e.message;
-  }
-  btn.disabled = false;
-});
 </script>
 </body>
 </html>
