@@ -8,12 +8,14 @@ exports.handler = async function(event) {
   if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers, body: "" };
   if (event.httpMethod !== "POST") return { statusCode: 405, headers, body: JSON.stringify({error:{message:"Method Not Allowed"}}) };
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { statusCode: 500, headers, body: JSON.stringify({error:{message:"ANTHROPIC_API_KEY not set in environment variables."}}) };
+  if (!apiKey) return { statusCode: 500, headers, body: JSON.stringify({error:{message:"ANTHROPIC_API_KEY not set."}}) };
   try {
+    const body = JSON.parse(event.body);
+    body.model = "claude-3-5-sonnet-20241022";
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: event.body
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     return { statusCode: res.status, headers, body: JSON.stringify(data) };
